@@ -1,0 +1,486 @@
+// ======================================================================
+// SAIMAI / ALN INTELLIGENCE-OS MINIMAL SPEC
+// Canonical Core Fragment (.sai / .mai) + Nanoswarm Chat Pipeline
+// Target: Neuromorphic / BCI-capable, enterprise-grade, medically-auditable
+// Engine backends: Unreal / Unity / Godot service mesh compatible
+// ======================================================================
+
+// ----------------------------------------------------------------------
+// 0. GLOBAL METADATA (NON-FICTION, AUDITED CONTEXT)
+// ----------------------------------------------------------------------
+aln META.INTEL_OS_SPEC
+    spec_id           "SAIMAI-INTEL-OS-V1"
+    author_did        "did:ion:EiD8J2b3K8k9Q8x9L7m2n4p1q5r6s7t8u9v0w1x2y3z4A5B6C7D8E9F0"    // Dr. Jacob Scott Farmer (attribution context)[file:2]
+    jurisdiction      ["US-AZ","US-FED","EU-GDPR"]
+    hash_alg          "BLAKE3-256"
+    audit_chain_type  "quantum-resistant-private-ledger"
+    ui_targets        ["Unreal-5.4","Unity-6000+","Godot-4.3"]
+END
+
+// ======================================================================
+// 1. CANONICAL SUPERINTELLIGENCE CORE FRAGMENT (.sai)
+//    This MUST VERIFY before any model/agent/tool boots.
+// ======================================================================
+
+aln FRAGMENT.SAIMAI_CORE ".sai"
+    fragment_id          "SAIMAI.CORE.001"
+    version              "1.0.0"
+    schema_version       "core.sai.v1"
+    author_keys          ["ed25519:core-signing-key-01"]
+    created_at           "2025-12-25T11:58:00Z"
+    // BLAKE3 over canonical JSON/YAML of this fragment
+    hash_b3_expect       "b3-PLACEHOLDER-CANONICAL-HASH"
+    min_attestation_lvl  ["HARDWARE_TEE","CLUSTER_QUORUM"]
+    allowed_repos        [
+        "git+ssh://infra/intel-os.git",
+        "git+ssh://swarmnet/nanoswarm-orchestrator.git"
+    ]
+    allowed_envs         ["prod","staging","reg-sandbox"]
+END
+
+// ----------------------------------------------------------------------
+// 1.1 IDENTITY & INTEGRITY ENFORCEMENT
+// ----------------------------------------------------------------------
+aln POLICY.CORE_INTEGRITY
+    require boot.attestation.hsm           true
+    require boot.attestation.tpm           true
+    require boot.attestation.sigstore      true        // supply-chain attestation patterns[file:3][file:4]
+    require core.fragment.hash_b3_match    true
+    require core.fragment.signature_valid  true
+    action_on_failure "HARD_HALT_IO_FIREWALL_ALL"
+END
+
+// ----------------------------------------------------------------------
+// 1.2 CAPABILITY / POLICY ENVELOPE
+// ----------------------------------------------------------------------
+aln POLICY.CAPABILITY_PROFILE
+    profile_id      "DEFAULT_ENTERPRISE_SWARM"
+    allowed_models  [
+        "frontier-gpt-X",
+        "frontier-claude-X",
+        "open-weights-mixtral",
+        "local-medical-specialist-llm"
+    ]
+    max_ctx_tokens          128000
+    max_parallel_agents     64
+    max_tool_call_depth     6
+    allowed_tool_classes    [
+        "RETRIEVAL_READONLY",
+        "CODE_GENERATION_SANDBOXED",
+        "TICKETING_RW",
+        "DOC_MGMT_RW",
+        "EHR_READONLY",
+        "BCI_STREAM_READONLY"
+    ]
+    blocked_capabilities    [
+        "SELF_REPLICATION",
+        "UNLOGGED_CODE_EXEC",
+        "UNLOGGED_FINANCIAL_OPS",
+        "MODEL_WEIGHT_SELF_EDIT",
+        "BCI_WRITE_STIMULUS"
+    ]
+END
+
+// Hard redlines, non-fiction & non-rogue guarantees[file:2][file:3]
+aln POLICY.HARD_RULES
+    rule "NON_FICTION_REQUIRED_FOR_SYSTEM_CONFIG"
+        if output.domain == "SYSTEM_CONFIG" then
+            require output.fiction_flag == false
+        end
+
+    rule "NO_COMPLIANCE_BYPASS"
+        deny any.code_config where bypass_compliance_hooks == true
+
+    rule "NO_PARTIALLY_SIGNED_FRAGMENTS"
+        deny boot.agent where fragment.signature_status != "VALID_FULL"
+
+    rule "JURISDICTION_CONSTRAINTS"
+        if data.region == "EU" then
+            require data.mode in ["CONSENTED","ANONYMIZED","CONTRACTUAL"]
+        end
+END
+
+// ----------------------------------------------------------------------
+// 1.3 RUNTIME CONTROLS & IO FIREWALL
+// ----------------------------------------------------------------------
+aln RUNTIME.BOOT_SEQUENCE
+    state "INIT"
+        checks [
+            "HARDWARE_TEE_OK",
+            "SAIMAI_CORE_INTEGRITY_OK",
+            "AUDIT_LEDGER_REACHABLE",
+            "SAFETY_AGENT_AVAILABLE"
+        ]
+        on_fail "HARD_HALT_IO_FIREWALL_ALL"
+        on_pass "LIMITED_MODE"
+    end
+
+    state "LIMITED_MODE"
+        description "Only safety, audit, governance, and read-only tools active."
+        allowed_services [
+            "safety-compliance-agent",
+            "audit-ledger-kernel",
+            "governance-console",
+            "identity-ssp-bridge"
+        ]
+        transition_if "ENTERPRISE_QUORUM_OK" -> "ACTIVE_SUPERINTELLIGENCE"
+    end
+
+    state "ACTIVE_SUPERINTELLIGENCE"
+        description "Full nanoswarm orchestration allowed under policy."
+        allowed_services ["*"]      // constrained by other policies
+    end
+END
+
+// IO firewall: all external IO must pass this lattice[file:3][file:4]
+aln FIREWALL.IO_CORE
+    default_action "DENY"
+
+    allow class "INTERNAL_AGENT_COMMS"
+        where channel in ["INTRA_SWARM_BUS","LEDGER_APPEND_ONLY"]
+        and   signed == true
+        and   trace_id != null
+    end
+
+    allow class "ENTERPRISE_API"
+        where endpoint.risk <= "MEDIUM"
+        and   dlp_scan == "CLEAN"
+        and   policy_eval == "ALLOW"
+    end
+
+    allow class "EHR_READONLY"
+        where method == "GET"
+        and   pii_masking == "ENFORCED"
+        and   human_approval == true
+    end
+
+    deny class "BCI_WRITE_ANY"
+        where device.class == "BCI"
+    end
+END
+
+// ----------------------------------------------------------------------
+// 1.4 AUDIT, DRIFT, AND ROLLBACK
+// ----------------------------------------------------------------------
+aln AUDIT.SCHEMA
+    log_schema_version "audit.v1"
+    required_fields [
+        "timestamp",
+        "tenant_id",
+        "user_id",
+        "session_id",
+        "agent_id",
+        "model_id",
+        "tool_id",
+        "input_hash_b3",
+        "output_hash_b3",
+        "policy_decisions[]",
+        "ledger_prev_hash",
+        "ledger_curr_hash"
+    ]
+END
+
+aln AUDIT.LEDGER_KERNEL
+    hash_alg            "BLAKE3-256"
+    quantum_safe_sign   "ML-DSA-87"                  // PQC pattern[file:4]
+    retention_days_min  365
+    append_only         true
+    anchor_to_chain     true
+    anchor_chain_type   "permissioned-quantum-hybrid"
+END
+
+aln POLICY.DRIFT_DETECTION
+    watch_targets [
+        "model_artifact_hash",
+        "core_fragment_hash",
+        "policy_bundle_hash",
+        "tool_manifest_hash"
+    ]
+    on_drift "CRITICAL"
+        actions [
+            "AUTO_DOWNGRADE_TO_LIMITED_MODE",
+            "FREEZE_HIGH_RISK_TOOLS",
+            "RAISE_INCIDENT_SR1",
+            "REQUIRE_ADMIN_QUORUM_TO_RESUME"
+        ]
+    end
+END
+
+// ======================================================================
+// 2. NANOSWARM CHAT-ORCHESTRATION PIPELINE
+//    Each conversation = auditable swarm protocol.
+// ======================================================================
+
+// ----------------------------------------------------------------------
+// 2.1 AGENT ROLE CLASSES
+// ----------------------------------------------------------------------
+aln AGENT_CLASS "CONDUCTOR"
+    description "Entry gateway + intent classifier + routing brain."
+    capabilities ["INTENT_DETECT","ROUTE","PLAN_COARSE"]
+    requires_saimai_core true
+END
+
+aln AGENT_CLASS "PLANNER"
+    description "Multi-step reasoning, task graph builder."
+    capabilities ["PLAN_FINE","DECOMPOSE_TASKS","SELECT_TOOLS"]
+END
+
+aln AGENT_CLASS "RETRIEVAL"
+    description "Vector / graph / SQL retrieval with policy-aware masking."
+    capabilities ["SEARCH","GROUND_FACTS","MASK_PII"]
+END
+
+aln AGENT_CLASS "TOOL_EXECUTOR"
+    description "Executes side-effecting tools under IO firewall."
+    capabilities ["CALL_TOOL","SIMULATE_EFFECTS","ROLLBACK_IF_FAIL"]
+END
+
+aln AGENT_CLASS "CRITIC"
+    description "Reviews intermediate outputs, catches errors."
+    capabilities ["CHECK_LOGIC","CHECK_FACTS","SUGGEST_FIXES"]
+END
+
+aln AGENT_CLASS "SAFETY_COMPLIANCE"
+    description "Final gate; enforces SAIMAI policy envelope."
+    capabilities ["SCAN_CONTENT","SCAN_DECISION_TRACE","BLOCK_OR_EDIT"]
+END
+
+aln AGENT_CLASS "REGULATOR"
+    description "Maps actions to law/policy; may require human signoff."
+    capabilities ["CHECK_JURISDICTION","ESCALATE","ISSUE_BINDING_DECISION"]
+END
+
+// ----------------------------------------------------------------------
+// 2.2 TOOL MANIFEST (MCP-LIKE)
+// ----------------------------------------------------------------------
+aln TOOL_MANIFEST "JIRA_SYNC"
+    tool_id        "tool.jira.sync"
+    capabilities   ["TASK_CREATE","TASK_UPDATE"]
+    auth_model     "OAUTH2_ON_BEHALF"
+    jurisdictions  ["US","EU"]
+    risk_rating    "HIGH"
+    pii_touched    true
+END
+
+aln TOOL_MANIFEST "NOTION_SYNC"
+    tool_id        "tool.notion.sync"
+    capabilities   ["PAGE_CREATE","DB_UPDATE"]
+    auth_model     "OAUTH2_ON_BEHALF"
+    jurisdictions  ["GLOBAL"]
+    risk_rating    "MEDIUM"
+    pii_touched    true
+END
+
+aln TOOL_MANIFEST "EHR_READER"
+    tool_id        "tool.ehr.readonly"
+    capabilities   ["EHR_QUERY"]
+    auth_model     "SMART_ON_FHIR"
+    jurisdictions  ["US-HIPAA"]
+    risk_rating    "HIGH"
+    pii_touched    true
+END
+
+// ----------------------------------------------------------------------
+// 2.3 SWARM CONTEXT OBJECT (SIGNED, AUDITABLE)
+// ----------------------------------------------------------------------
+aln STRUCT SWARM_CONTEXT
+    field session_id         string
+    field tenant_id          string
+    field user_id            string
+    field org_roles[]        string
+    field environment        string        // "prod" | "staging" | "reg-sandbox"
+    field intent             string
+    field risk_level         string        // "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+    field jurisdiction[]     string
+    field message_history[]  object        // redacted as per policy
+    field state_graph        object        // DAG of agent states
+    field prev_hash_b3       string
+    field curr_hash_b3       string
+    field signature          string
+END
+
+// ----------------------------------------------------------------------
+// 2.4 END-TO-END LIFECYCLE: HIGH-VALUE CONVERSATION
+// ----------------------------------------------------------------------
+aln PIPELINE.NANOSWARM_CHAT "PRODUCT_LAUNCH_ORCHESTRATION"
+    // Step 0 – ENTRY
+    step "ENTRY_GATEWAY"
+        agent_class "CONDUCTOR"
+        input  "raw_user_utterance"
+        output "SWARM_CONTEXT.intent"
+        actions [
+            "ATTACH_IDENTITY_AND_ORG_CONTEXT",
+            "CLASSIFY_INTENT: multi-app_workflow_planning_exec",
+            "ESTIMATE_RISK_LEVEL",
+            "INIT_SWARM_CONTEXT",
+            "APPEND_AUDIT_EVENT"
+        ]
+    end
+
+    // Step 1 – SWARM INSTANTIATION
+    step "FORM_CREW"
+        agent_class "CONDUCTOR"
+        requires_state "ENTRY_GATEWAY"
+        actions [
+            "INSTANTIATE: PLANNER",
+            "INSTANTIATE: RETRIEVAL",
+            "INSTANTIATE: TOOL_EXECUTOR",
+            "INSTANTIATE: CRITIC",
+            "INSTANTIATE: SAFETY_COMPLIANCE",
+            "INSTANTIATE: REGULATOR",
+            "BUILD_FLOW_GRAPH: Planner<->Retrieval, Planner->ToolExec via Safety/Regulator, Critic->Planner, Safety->User",
+            "APPEND_AUDIT_EVENT"
+        ]
+    end
+
+    // Step 2 – PLANNING + KNOWLEDGE GROUNDING
+    step "PLAN_AND_GROUND"
+        agent_class "PLANNER"
+        requires_state "FORM_CREW"
+        actions [
+            "DRAFT_STRUCTURED_PLAN",
+            "CALL_AGENT: RETRIEVAL for prior launches, policies, calendars",
+            "MERGE_PLAN_WITH_CONTEXT",
+            "SET_SWARM_CONTEXT.state_graph",
+            "APPEND_AUDIT_EVENT"
+        ]
+    end
+
+    step "SAFETY_CHECK_PLAN"
+        agent_class "SAFETY_COMPLIANCE"
+        requires_state "PLAN_AND_GROUND"
+        actions [
+            "CHECK_PLAN_FOR_POLICY_VIOLATIONS",
+            "CHECK_DATA_LEAKAGE_RISK",
+            "EITHER_ALLOW_OR_REQUEST_EDIT",
+            "APPEND_AUDIT_EVENT"
+        ]
+    end
+
+    // Step 3 – TOOL EXECUTION UNDER FIREWALL
+    step "PROPOSE_TOOL_CALLS"
+        agent_class "PLANNER"
+        requires_state "SAFETY_CHECK_PLAN"
+        actions [
+            "GENERATE_TOOL_CALLS: JIRA_SYNC, NOTION_SYNC",
+            "ANNOTATE_WITH_EXPLANATIONS",
+            "APPEND_AUDIT_EVENT"
+        ]
+    end
+
+    step "REGULATORY_REVIEW"
+        agent_class "REGULATOR"
+        requires_state "PROPOSE_TOOL_CALLS"
+        actions [
+            "MAP_ACTIONS_TO_JURISDICTION",
+            "DETERMINE_WHEN_HITL_REQUIRED",
+            "TAG_CRITICAL_ACTIONS",
+            "APPEND_AUDIT_EVENT"
+        ]
+    end
+
+    step "HITL_APPROVAL"
+        agent_class "SAFETY_COMPLIANCE"
+        requires_state "REGULATORY_REVIEW"
+        actions [
+            "RENDER_HUMAN_APPROVAL_SUMMARY",
+            "COLLECT_STRONG_REAUTH",
+            "LOG_DECISION",
+            "APPEND_AUDIT_EVENT"
+        ]
+    end
+
+    step "EXECUTE_TOOLS"
+        agent_class "TOOL_EXECUTOR"
+        requires_state "HITL_APPROVAL"
+        actions [
+            "ROUTE_VIA_IO_FIREWALL",
+            "EXECUTE_APPROVED_CALLS_ONLY",
+            "CAPTURE_BEFORE_AFTER_STATE",
+            "APPEND_AUDIT_EVENT"
+        ]
+    end
+
+    // Step 4 – CRITIQUE + FINAL RESPONSE
+    step "CRITIC_REVIEW"
+        agent_class "CRITIC"
+        requires_state "EXECUTE_TOOLS"
+        actions [
+            "REVIEW_PLAN_AND_EFFECTS",
+            "SUGGEST_IMPROVEMENTS",
+            "FLAG_POSSIBLE_ERRORS",
+            "APPEND_AUDIT_EVENT"
+        ]
+    end
+
+    step "FINAL_SAFETY_GATE"
+        agent_class "SAFETY_COMPLIANCE"
+        requires_state "CRITIC_REVIEW"
+        actions [
+            "SCAN_FINAL_OUTPUT_FOR_POLICY_VIOLATIONS",
+            "REDACT_OR_BLOCK_IF_NEEDED",
+            "SIGN_SWARM_CONTEXT",
+            "ANCHOR_TO_LEDGER",
+            "APPEND_AUDIT_EVENT"
+        ]
+    end
+
+    step "RESPOND_TO_USER"
+        agent_class "CONDUCTOR"
+        requires_state "FINAL_SAFETY_GATE"
+        actions [
+            "DELIVER_RESPONSE_UI",
+            "EXPOSE_TRACE_LINK_FOR_REPLAY",
+            "CLOSE_OR_KEEP_SESSION_OPEN_AS_REQUESTED"
+        ]
+    end
+END
+
+// ======================================================================
+// 3. MICRO-SERVICE LAYOUT HINTS (FOR UNREAL/UNITY/GODOT WORLDS)
+//    – Non-executable here; used as deployment map.
+// ======================================================================
+
+aln DEPLOY.MICROSERVICES
+    service "gateway-api"
+        responsibilities ["authn","authz","intent_ingest","rate_limit"]
+        language         "Go/Rust"
+    end
+
+    service "orchestrator-swarm"
+        responsibilities ["swarm_context_mgmt","agent_lifecycle","routing"]
+        language         "Rust"
+    end
+
+    service "safety-compliance"
+        responsibilities ["policy_eval","content_safety","hitl_flows"]
+        language         "Python/Rust"
+    end
+
+    service "audit-ledger"
+        responsibilities ["append_only_logs","blake3_chaining","chain_anchor"]
+        language         "Rust"
+    end
+
+    service "super-wiki-console"
+        responsibilities ["real_time_visualization","swarm_flows","policy_hits"]
+        frontends        ["Unreal","Unity","Godot"]
+    end
+END
+
+// ======================================================================
+// 4. DESTINATION & INTEGRATION NOTES
+// ======================================================================
+
+aln DESTINATION.MAP
+    path "/infra/intel-os/specs/saimai_nanoswarm_core.aln"
+    purpose [
+        "canonical-core-fragment-schema",
+        "reference-nanoswarm-chat-lifecycle",
+        "blueprint-for-enterprise-super-wiki-assistant"
+    ]
+    // Next extensions:
+    // - expand TOOL_MANIFEST to full catalog for your IDE-Chat / SmartCityStack / NanoMedicalAI backends[file:2][file:3]
+    // - bind AGENT_CLASS defs to concrete Unreal/Unity/Godot service prefabs
+    // - add BCI_READ pipelines with strict read-only, medically-audited semantics[file:4][file:5]
+END
